@@ -15,6 +15,7 @@
 #include <CGAL/license/Surface_mesh_topology.h>
 
 #include <CGAL/Combinatorial_map_operations.h>
+#include <CGAL/Cell_attribute.h>
 #include <CGAL/Combinatorial_map.h>
 #include <CGAL/Random.h>
 #include <CGAL/Face_graph_wrapper.h>
@@ -720,6 +721,137 @@ public:
     CGAL::Random& random=get_default_random();
     generate_random_closed_path(random.get_int(1, 10000), random);
   }
+
+
+  /// Closes an open path using spanning tree (To close path trivially use close())
+  void close_path(bool simple = false, bool update_isclosed = true) {
+
+		if (is_empty()) {
+			generate_random_closed_path();
+			return update_is_closed();
+		} else if (m_is_closed) {
+			return;
+		}
+
+		typename Map::size_type grey = m_map.get_new_mark();
+		std::queue<Dart_const_handle> queue;
+		std::map<Dart_const_handle, Dart_const_handle> mst; //stores <dart, previous dart>>
+
+		Dart_const_handle source_vertex =
+				back_flip() ? back() : m_map.other_extremity(back());
+		Dart_const_handle target_vertex =
+				front_flip() ? m_map.other_extremity(front()) : front();
+		Dart_const_handle dh;
+
+		if (simple) //mark edges of open path, and darts leading to path
+		{
+			unsigned int i = 0;
+			for (i = 1; i < m_path.size(); ++i) {
+				if (m_flip[i] && !m_map.template is_free<2>(m_path[i])) {
+					for (auto it = m_map.template darts_of_cell<0>
+							(m_map.template beta<2>(m_path[i])).begin(),
+							itend=m_map.template darts_of_cell<0>
+								(m_map.template beta<2>(m_path[i])).end();
+					it!=itend; ++it)
+					{
+						if (!m_map.template is_free<2>(it))
+						{	m_map.mark(m_map.template beta<2>(it), grey);}
+					}
+				}
+				else
+				{
+					for (auto it=m_map.template darts_of_cell<0>(m_path[i]).begin(),
+							itend=m_map.template darts_of_cell<0>(m_path[i]).end();
+								it!=itend; ++it)
+					{
+						if (!m_map.template is_free<2>(it))
+						{	m_map.mark(m_map.template beta<2>(it), grey);  }
+					}
+				}
+
+			}
+
+			if (front_flip() && !m_map.template is_free<2>(front())) {
+				m_map.mark(m_map.template beta<2>(front()), grey);
+			} else {
+				m_map.mark(front(), grey);
+			}
+
+		}
+
+		//initialize spanning tree
+		for (auto it = m_map.template darts_of_cell<0>(target_vertex).begin(),
+				itend=m_map.template darts_of_cell<0>(target_vertex).end();
+					it!=itend; ++it)
+		{
+			mst.insert(std::make_pair(it, m_map.null_dart_handle));
+		}
+
+		bool found = false;
+		Dart_const_handle final_dart;
+
+		queue.push(target_vertex);
+
+		while (!queue.empty()) { //construct spanning tree
+			dh = queue.front();
+			queue.pop();
+
+			for (auto it = m_map.template darts_of_cell<0>(dh).begin(),
+					itend=m_map.template darts_of_cell<0>(dh).end();
+						it!=itend; ++it)
+			{
+
+				if (!m_map.is_marked(it, grey))
+				{
+
+					if (m_map.template belong_to_same_cell<0>
+						(source_vertex, m_map.other_extremity(it))) //end of path found
+					{
+						found=true;
+						mst.insert(std::make_pair(it, m_map.template beta<0>(dh)));
+						final_dart=it;
+						break;
+					}
+
+					m_map.mark(it, grey);
+
+					if (simple)
+					{
+						if (!m_map.template is_free<2>(it))
+							{	m_map.mark(m_map.template beta<2>(it), grey); }
+
+						for (auto in=m_map.template darts_of_cell<0>(m_map.other_extremity(it)).begin(),
+								inend=m_map.template darts_of_cell<0>(m_map.other_extremity(it)).end();
+									in!=inend; ++in)
+						{
+							if (!m_map.template is_free<2>(in))
+							{ m_map.mark(m_map.template beta<2>(in), grey); }
+						}
+					}
+
+					mst.insert(std::make_pair(it, m_map.template beta<0>(dh)));
+					queue.push(m_map.template beta<1>(it));
+				}
+
+			}
+			if (found) { break; }
+		}
+
+		m_map.free_mark(grey);
+
+		Dart_const_handle next = final_dart;
+		do{ //build path extension from (partial) spanning tree
+			if (!m_map.template is_free<2>(next))
+			{ push_back(m_map.template beta<2>(next)); }
+			else
+			{ push_back(next, true); }
+
+			next = mst.find(next)->second;
+		} while (next != m_map.null_dart_handle);
+
+		if (update_isclosed) { update_is_closed(); }
+	}
+
 
   /// Replace edge [i] by the path of darts along the face.
   /// If this face does not exist (if it is a boundary) then replace the edge

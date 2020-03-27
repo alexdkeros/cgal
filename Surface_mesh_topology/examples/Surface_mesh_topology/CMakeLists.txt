@@ -33,6 +33,7 @@ set(SOURCE_FILES
   path_homotopy_with_symbols.cpp
   path_homotopy_with_symbols_2.cpp
   surface_mesh_topology_with_sm_and_polyhedron.cpp
+  path_completion_example.cpp
   )
 
 foreach(cppfile ${SOURCE_FILES})
@@ -45,4 +46,5 @@ if(CGAL_Qt5_FOUND)
   target_link_libraries(open_path_homotopy PUBLIC CGAL::CGAL_Qt5)
   target_link_libraries(path_homotopy PUBLIC CGAL::CGAL_Qt5)
   target_link_libraries(surface_mesh_topology_with_sm_and_polyhedron PUBLIC CGAL::CGAL_Qt5)
+  target_link_libraries(path_completion_example PUBLIC CGAL::CGAL_Qt5)
 endif()
